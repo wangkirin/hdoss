@@ -20,40 +20,47 @@ public class Test {
 
 		// test list objects
 		try {
-			ObsClient obscli = new ObsClient("", "", obsconf);
+			ObsClient obscli = new ObsClient("", "", "", obsconf);
 			ListObjectsRequest listrequest = new ListObjectsRequest();
 			listrequest.setBucketName("test/");
 			ObjectListing objlist = obscli.listObjects(listrequest);
-			List<S3Object> s3s = objlist.getObjectSummaries();
-			for (S3Object s3Object : s3s) {
-				System.out.println(s3Object.getObjectKey());
+			if (null!=objlist) {
+				List<S3Object> s3s = objlist.getObjectSummaries();
+				for (S3Object s3Object : s3s) {
+					System.out.println(s3Object.getObjectKey());
+				}
 			}
+			
 		} catch (ObsException e) {
 			e.printStackTrace();
 		}
 
 		// test create bucket
 		try {
-			ObsClient obscli = new ObsClient("", "", obsconf);
-			obscli.createBucket("testhdoss", "chn");
+			ObsClient obscli = new ObsClient("", "", "", obsconf);
+			obscli.createBucket("testhdoss1", "chn");
+			System.out.println("create bucket OK");
 		} catch (ObsException e) {
 			e.printStackTrace();
 		}
 
 		// test get object
 		try {
-			ObsClient obscli = new ObsClient("", "", obsconf);
-			S3Object s3 = obscli.getObject("test", "testfile.txt", null);
-			InputStream is = s3.getObjectContent();
-			int tempbyte;
-			try {
-				while ((tempbyte = is.read()) != -1) {
-					System.out.write(tempbyte);
+			ObsClient obscli = new ObsClient("", "", "", obsconf);
+			S3Object s3 = obscli.getObject("test", "testfile1.txt", null);
+			if (null != s3) {
+				InputStream is = s3.getObjectContent();
+				int tempbyte;
+				try {
+					while ((tempbyte = is.read()) != -1) {
+						System.out.write(tempbyte);
+					}
+					is.close();
+				} catch (IOException e) {
+					e.printStackTrace();
 				}
-				is.close();
-			} catch (IOException e) {
-				e.printStackTrace();
 			}
+
 		} catch (ObsException e) {
 			e.printStackTrace();
 		}
@@ -61,7 +68,7 @@ public class Test {
 		// test put object
 		ObsClient obscli;
 		try {
-			obscli = new ObsClient("", "", obsconf);
+			obscli = new ObsClient("", "", "", obsconf);
 			File putfile = new File("E:\\astrill-setup-win.exe");
 			obscli.putObject("test", "docker.pdf", putfile);
 		} catch (ObsException e) {

@@ -16,6 +16,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Hdfs;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.codehaus.jackson.map.DeserializerFactory.Config;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
 
@@ -30,37 +31,60 @@ import com.huawei.obs.services.model.ObjectMetadata;
 
 public class ObsClient {
 	private static FileSystem fs;
+	private UserGroupInformation ugiChk = null;
 
-	public ObsClient(String accessId, String accessKey, ObsConfiguration config) throws ObsException {
-		if (accessId.equals("") && accessKey.equals("")) {
+	public ObsClient(String krbValue, String keytabValue, String principalValue, ObsConfiguration config)
+			throws ObsException {
+		if (krbValue.equals("") && keytabValue.equals("") && principalValue.equals("")) {
 			fs = getFileSystem(config.getConf(), "hdfs");
 		} else {
-			// TODO 处理Kerberos鉴权凭证
+			getSecurityFileSystemKerbose(config.getConf(), krbValue, keytabValue, principalValue);
 		}
 	}
 
 	public S3Object getObject(String bucketName, String objectKey, String versionId) throws ObsException {
-		Path srcPath = new Path("/"+bucketName+"/"+objectKey);
-		S3Object outputobj=new S3Object();
-		InputStream in = null;
-			try {
-				in = fs.open(srcPath);
-				outputobj.setObjectContent(in);
-			    ObjectMetadata objmeta=new ObjectMetadata();
-			    objmeta.setContentLength((long) in.available());
-			    outputobj.setMetadata(objmeta);
-			} catch (Exception e) {
-				e.printStackTrace();
-				throw new ObsException(e.toString());
+
+		Path srcPath = new Path("/" + bucketName + "/" + objectKey);
+
+		// 检查文件是否存在
+		try {
+			if (!fs.exists(srcPath)) {
+				return null;
 			}
+		} catch (IOException e1) {
+			throw new ObsException(e1.toString());
+		}
+
+		S3Object outputobj = new S3Object();
+		InputStream in = null;
+		try {
+			in = fs.open(srcPath);
+			outputobj.setObjectContent(in);
+			ObjectMetadata objmeta = new ObjectMetadata();
+			objmeta.setContentLength((long) in.available());
+			outputobj.setMetadata(objmeta);
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new ObsException(e.toString());
+		}
 		return outputobj;
 
 	}
 
 	public ObjectListing listObjects(ListObjectsRequest listObjectsRequest) throws ObsException {
+
 		String bucketName = listObjectsRequest.getBucketName();
 		Path bucketPath = new Path("/" + bucketName);
-		// TODO 入参校验，检查bucket是否存在
+
+		// 检查文件是否存在
+		try {
+			if (!fs.exists(bucketPath)) {
+				return null;
+			}
+		} catch (IOException e1) {
+			throw new ObsException(e1.toString());
+		}
+
 		ObjectListing outputlisting = new ObjectListing();
 		List<S3Object> objectlist = new ArrayList<S3Object>();
 		try {
@@ -77,7 +101,6 @@ public class ObsClient {
 		}
 		outputlisting.setObjectSummaries(objectlist);
 		return outputlisting;
-
 	}
 
 	public PutObjectResult putObject(String bucketName, String objectKey, File file) throws ObsException {
@@ -109,6 +132,7 @@ public class ObsClient {
 		Path destPath = new Path("/" + bucketName + "/" + objectKey);
 		try {
 			FSDataOutputStream outputStream = fs.create(destPath);
+
 			byte[] tempbyte = new byte[100];
 			int byteread = 0;
 			while ((byteread = input.read(tempbyte)) != -1) {
@@ -129,7 +153,6 @@ public class ObsClient {
 		tempBucket.setLocation(location);
 
 		try {
-			// TODO 检查bucket是否存在
 			boolean ok = fs.mkdirs(new Path("/" + bucketName));
 			if (!ok) {
 				return null;
@@ -138,7 +161,7 @@ public class ObsClient {
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new ObsException(e.toString());
-		} 
+		}
 		return tempBucket;
 	}
 
@@ -182,6 +205,46 @@ public class ObsClient {
 		return handlerfs;
 	}
 
+	private FileSystem getSecurityFileSystemKerbose(final Configuration clientconf, String krbValue, String keytabValue,
+			String principleValue) {
+		FileSystem temfs = null;
+
+		try {
+			System.setProperty("java.security.krb5.conf", krbValue);
+
+			String keytab = "username.client.keytab.file";
+			String principal = "username.client.kerberos.principal";
+
+			UserGroupInformation.setConfiguration(clientconf);
+
+			clientconf.set(keytab, keytabValue);
+			clientconf.set(principal, principleValue);
+
+			ugiCheckTgt(keytabValue, principleValue);
+
+			if (ugiChk == null) {
+				return null;
+			}
+			temfs = ugiChk.doAs(new PrivilegedExceptionAction<FileSystem>() {
+
+				@Override
+				public FileSystem run() throws Exception {
+					try {
+						return FileSystem.get(clientconf);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+					return null;
+				}
+			});
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return temfs;
+
+	}
+
 	private static FileSystem getSecurityFileSystem(final Configuration clientconf, UserGroupInformation ugi) {
 		FileSystem handlerfs = null;
 		try {
@@ -210,6 +273,18 @@ public class ObsClient {
 			System.out.println("getFileSystemError" + e.getMessage());
 		}
 		return handlerfs;
+	}
+
+	public void ugiCheckTgt(String keytabValue, String principleValue) throws Exception {
+		try {
+			if (null == ugiChk) {
+				ugiChk = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principleValue, keytabValue);
+			} else {
+				ugiChk.checkTGTAndReloginFromKeytab();
+			}
+		} catch (Exception e) {
+			throw e;
+		}
 	}
 
 }
