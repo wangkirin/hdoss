@@ -47,7 +47,7 @@ public class Test {
 		// test get object
 		try {
 			ObsClient obscli = new ObsClient("", "", "", obsconf);
-			S3Object s3 = obscli.getObject("test", "testfile1.txt", null);
+			S3Object s3 = obscli.getObject("test", "testfile.txt", null);
 			if (null != s3) {
 				InputStream is = s3.getObjectContent();
 				int tempbyte;
@@ -70,7 +70,7 @@ public class Test {
 		try {
 			obscli = new ObsClient("", "", "", obsconf);
 			File putfile = new File("E:\\astrill-setup-win.exe");
-			obscli.putObject("test", "docker.pdf", putfile);
+			obscli.putObject("test2", "docker1.pdf", putfile);
 		} catch (ObsException e) {
 			e.printStackTrace();
 		}
