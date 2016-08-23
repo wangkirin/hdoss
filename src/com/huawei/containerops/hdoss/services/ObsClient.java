@@ -35,18 +35,16 @@ public class ObsClient {
 
 	public ObsClient(String krbValue, String keytabValue, String principalValue, ObsConfiguration config)
 			throws ObsException {
-		if (krbValue.equals("") && keytabValue.equals("") && principalValue.equals("")) {
+		if (krbValue.equals("") || keytabValue.equals("") || principalValue.equals("")) {
 			fs = getFileSystem(config.getConf(), "hdfs");
 		} else {
-			getSecurityFileSystemKerbose(config.getConf(), krbValue, keytabValue, principalValue);
+			fs=getSecurityFileSystemKerbose(config.getConf(), krbValue, keytabValue, principalValue);
 		}
 	}
 
 	public S3Object getObject(String bucketName, String objectKey, String versionId) throws ObsException {
 
 		Path srcPath = new Path("/" + bucketName + "/" + objectKey);
-
-		// 检查文件是否存在
 		try {
 			if (!fs.exists(srcPath)) {
 				return null;
@@ -76,7 +74,6 @@ public class ObsClient {
 		String bucketName = listObjectsRequest.getBucketName();
 		Path bucketPath = new Path("/" + bucketName);
 
-		// 检查文件是否存在
 		try {
 			if (!fs.exists(bucketPath)) {
 				return null;
@@ -104,47 +101,75 @@ public class ObsClient {
 	}
 
 	public PutObjectResult putObject(String bucketName, String objectKey, File file) throws ObsException {
-		// TODO 入参校验，检查bucket是否存在,检查object是否存在
-		Path destPath = new Path("/" + bucketName + "/" + objectKey);
-
+		
 		try {
-			FileInputStream fis = new FileInputStream(file);
-			FSDataOutputStream outputStream = fs.create(destPath);
-			byte[] tempbyte = new byte[100];
-			int byteread = 0;
-			while ((byteread = fis.read(tempbyte)) != -1) {
-				outputStream.write(tempbyte);
+			if (!fs.exists(new Path("/"+bucketName))) {
+				return null;
 			}
-			outputStream.close();
-			fs.close();
+		} catch (IOException e1) {
+			throw new ObsException(e1.toString());
+		}
+		
+		FileInputStream fis=null;
+		PutObjectResult outputResult=null;
+		try{
+			fis=new FileInputStream(file);
+			ObjectMetadata objmeta = new ObjectMetadata();
+			objmeta.setContentLength((long) fis.available());
+			outputResult=putObject(bucketName, objectKey, fis, objmeta);	
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new ObsException(e.toString());
+		}finally {
+			if (null!=fis) {
+				try {
+					fis.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+					throw new ObsException(e.toString());
+				}
+				fis=null;
+			}
 		}
-
-		return null;
-
+		return outputResult;
 	}
 
 	public PutObjectResult putObject(String bucketName, String objectKey, InputStream input, ObjectMetadata metadata)
 			throws ObsException {
-		// TODO 入参校验，检查bucket是否存在,检查object是否存在
-		Path destPath = new Path("/" + bucketName + "/" + objectKey);
 		try {
-			FSDataOutputStream outputStream = fs.create(destPath);
-
+			if (!fs.exists(new Path("/"+bucketName))) {
+				return null;
+			}
+		} catch (IOException e1) {
+			throw new ObsException(e1.toString());
+		}
+		
+		Path destPath = new Path("/" + bucketName + "/" + objectKey);
+		FSDataOutputStream outputStream =null;
+		PutObjectResult outputResult=null;
+		try {
+			outputStream = fs.create(destPath);
 			byte[] tempbyte = new byte[100];
 			int byteread = 0;
 			while ((byteread = input.read(tempbyte)) != -1) {
 				outputStream.write(tempbyte);
 			}
 			outputStream.close();
-			fs.close();
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new ObsException(e.toString());
+		}finally {
+			if (null!=input) {
+				try {
+					input.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+					throw new ObsException(e.toString());
+				}
+				input=null;
+			}
 		}
-		return null;
+		return outputResult;
 	}
 
 	public S3Bucket createBucket(String bucketName, String location) throws ObsException {
